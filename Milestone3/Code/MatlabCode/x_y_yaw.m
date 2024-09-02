@@ -50,13 +50,13 @@ H = [1;
      0;
      0];          % Observation matrix
 
-Q = 0.629*eye(3);     % Process noise covariance to be applied to the whole matrix [2 x 2]
+Q = 0.629*eye(3);     % Process noise covariance to be applied to the whole matrix
 
 R = 10*eye(3);           % Measurement noise covariance old 0.1
 
 x = [0; 
      0;
-     0];         % Initial state estimate for x, y directions and yaw.
+     0];         % Initial state
 
 P = eye(3);         % Initial error covariance to be large number
 
