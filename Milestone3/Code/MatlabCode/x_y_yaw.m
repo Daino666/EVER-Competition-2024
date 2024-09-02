@@ -2,7 +2,7 @@ clear;
 clc;
 
 % Specify the file name
-filename = '/home/eslam/catkin_workspace/src/t2/scripts/Dimensions33.csv';
+filename = '/home/eslam/catkin_workspace/src/t2/scripts/milestone3/Graphs3/change_lane_vel_acc_RMS.csv';
 
 % Read the data from the CSV file
 data = readtable(filename);
@@ -33,16 +33,18 @@ yPointsM= awgn(columnData_Y_clean, 25.9, "measured");       % old = 46.3
 yawPointsM= awgn(columnData_yaw_clean,0.075,"measured");
 
 
-
-% Apply Noise to x y yaw and store it in a New CSV called NoisyOdom.csv for line path------------------
-
+% Kalman filter parameters
 A = [ 1 0 0; 
       0 1 0;
-      0 0 1];   
+      0 0 1];    % State transition matrix
 
 B = [0 1 1;
      0 1 1;
-     1 0 0;]; 
+     1 0 0;];    % control input matrix
+
+U = [1;
+     1;
+     1];         % control input vector
 
 H = [1;
      0;
@@ -59,85 +61,47 @@ x = [0;
 P = eye(3);         % Initial error covariance to be large number
 
 
-columnData_YN = yPointsM;
-filtered_yPoints = zeros(size(columnData_YN));
-for i = 1:length(columnData_YN)
-    % Predictionstep
-    x = A.*x;                        % Predicted state estimate
-    P = A.*P.*A' + Q;              % Predicted error covariance
-    % P = A.*P. *A' + Q;               % Predicted error covariance
-    
-    % Update step
-    K = P.*H'/((H.*P).*H' + R);          % Kalman gain
-    % K = eye(2).*H'/(H.*eye(2).*H' + R);  % Kalman gain (using identity matrix for P)
 
-    x = x + K.*(columnData_YN(i) - H.*x); % Updated state estimate
-    P = P - K.*(H.*P);           % Updated error covariance  (use TIMES (.) for elementwise multiplication.)
+% using fuction with single variable to try each parameter in the filter
+function filteredData = applyKalmanFilter(noisyData, A, H, Q, R, x, P)
+    % Initialize the filtered data array
+    filteredData = zeros(size(noisyData));
     
-    filtered_yPoints(i) = x(1);    % Store filtered position
-end
-
-columnData_XN = xPointsM;
-filtered_xPoints = zeros(size(columnData_XN));
-for i = 1:length(columnData_XN)
-    % Predictionstep
-    x = A.*x;                        % Predicted state estimate
-    P = A.*P.*A' + Q;              % Predicted error covariance
-    % P = A.*P. *A' + Q;               % Predicted error covariance
-    
-    % Update step
-    K = P.*H'/((H.*P).*H' + R);          % Kalman gain
-    % K = eye(2).*H'/(H.*eye(2).*H' + R);  % Kalman gain (using identity matrix for P)
-
-    x = x + K.*(columnData_XN(i) - H.*x); % Updated state estimate
-    P = P - K.*(H.*P);           % Updated error covariance  (use TIMES (.) for elementwise multiplication.)
-    
-    filtered_xPoints(i) = x(1);    % Store filtered position
-end
-
-columnData_YawN = yawPointsM;
-filtered_yawPoints = zeros(size(columnData_YawN));
-for i = 1:length(columnData_YawN)
-    % Predictionstep
-    x = A.*x;                        % Predicted state estimate
-    P = A.*P.*A' + Q;              % Predicted error covariance
-    % P = A.*P. *A' + Q;               % Predicted error covariance
-    
-    % Update step
-    K = P.*H'/((H.*P).*H' + R);          % Kalman gain
-    % K = eye(2).*H'/(H.*eye(2).*H' + R);  % Kalman gain (using identity matrix for P)
-
-    x = x + K.*(columnData_YawN(i) - H.*x); % Updated state estimate
-    P = P - K.*(H.*P);           % Updated error covariance  (use TIMES (.) for elementwise multiplication.)
-    
-    filtered_yawPoints(i) = x(1);    % Store filtered position
+    for i = 1:length(noisyData)
+        % Prediction step
+        x = A .* x;                        % Predicted state estimate
+        P = A .* P .* A' + Q;               % Predicted error covariance
+        
+        % Update step
+        K = P .* H' / ((H .* P) .* H' + R);    % Kalman gain
+        x = x + K .* (noisyData(i) - H .* x); % Updated state estimate
+        P = P - K .* H .* P;                % Updated error covariance
+        
+        filteredData(i) = x(1);   
+    end
 end
 
 
-%{
-%true value plot
-plot(columnData_X_clean,columnData_Y_clean , '-b');
-xlabel('odom_x');
-ylabel('odom_y');
-grid on;
-hold on;
-%}
 
-%noise plot
-plot(xPointsM,yPointsM, '-r');
+% Apply Kalman filter
+filtered_xPoints = applyKalmanFilter(xPointsM, A, H, Q, R, x, P);
+filtered_yPoints = applyKalmanFilter(yPointsM, A, H, Q, R, x, P);
+filtered_yawPoints = applyKalmanFilter(yawPointsM, A, H, Q, R, x, P);
+
+% Plot noisy and filtered data
+plot(xPointsM, yPointsM, '-r');
 xlabel('noised x');
 ylabel('noised y');
 grid on;
 hold on;
 
-%filter plot
-plot(filtered_xPoints,filtered_yPoints, '-g');
+plot(filtered_xPoints, filtered_yPoints, '-g');
 xlabel('filtered x');
 ylabel('filtered y');
 grid on;
 hold on;
 
-legend ('noisy signal','filtered signal')
+legend('noisy signal', 'filtered signal')
 
 overall_RMS_x = mean(data_rms_x_clean)
 overall_RMS_y = mean(data_rms_y_clean)
@@ -147,6 +111,6 @@ overall_RMS_yaw = mean(data_rms_yaw_clean)
 new_data = table(columnData_X_clean, columnData_Y_clean, columnData_yaw_clean, xPointsM, yPointsM, yawPointsM, filtered_xPoints, filtered_yPoints, filtered_yawPoints, ...
                  'VariableNames', {'x_odom', 'y_odom', 'yaw_odom', 'x_noisy', 'y_noisy', 'yaw_noisy', 'x_filtered', 'y_filtered', 'yaw_filtered'});
 
-new_file = '/home/eslam/catkin_workspace/src/t2/scripts/change_lane_path_odom_noise_filter.csv';
+new_file = '/home/eslam/catkin_workspace/src/t2/scripts/trial1.csv';
 
 writetable(new_data, new_file);
